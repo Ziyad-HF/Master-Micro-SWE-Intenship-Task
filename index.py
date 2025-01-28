@@ -1,7 +1,7 @@
 # main.py
 from PySide2.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QLineEdit, QPushButton, QLabel,
-                               QTableWidget, QTableWidgetItem, QSplitter)
+                               QTableWidget, QTableWidgetItem, QSplitter, QMessageBox)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -48,6 +48,40 @@ class FunctionParser:
             return False, f"Validation error: {str(e)}"
 
     @staticmethod
+    def check_domain_restrictions(func_str, x_val):
+        """
+        Check domain restrictions for sqrt and log10.
+        Returns (bool, str) tuple - (is_valid, restriction_type)
+        """
+        expr = func_str.lower()
+
+        # Extract arguments of sqrt and log10 functions
+        sqrt_matches = re.finditer(r'sqrt\(([^)]+)\)', expr)
+        log_matches = re.finditer(r'log10\(([^)]+)\)', expr)
+
+        # Check sqrt arguments
+        for match in sqrt_matches:
+            arg = match.group(1)
+            try:
+                value = eval(arg.replace('x', str(x_val)), {"__builtins__": {}}, {'sqrt': sqrt, 'log10': log10})
+                if value < 0:
+                    return False, 'sqrt'
+            except:
+                continue
+
+        # Check log10 arguments
+        for match in log_matches:
+            arg = match.group(1)
+            try:
+                value = eval(arg.replace('x', str(x_val)), {"__builtins__": {}}, {'sqrt': sqrt, 'log10': log10})
+                if value <= 0:
+                    return False, 'log'
+            except:
+                continue
+
+        return True, None
+
+    @staticmethod
     def evaluate(func_str, x_val):
         """Evaluate function at given x value."""
         # Replace mathematical operations with Python syntax
@@ -83,8 +117,8 @@ class IntersectionTable(QTableWidget):
         """Update table with new intersection points."""
         self.setRowCount(len(points))
         for i, (x, y) in enumerate(points):
-            self.setItem(i, 0, QTableWidgetItem(f"{x:.3f}"))
-            self.setItem(i, 1, QTableWidgetItem(f"{y:.3f}"))
+            self.setItem(i, 0, QTableWidgetItem(f"{x:.2f}"))
+            self.setItem(i, 1, QTableWidgetItem(f"{y:.2f}"))
 
 
 class MainWindow(QMainWindow):
@@ -163,6 +197,32 @@ class MainWindow(QMainWindow):
 
         self.ax = self.figure.add_subplot(111)
 
+    def show_domain_restriction_dialog(self, restriction_type):
+        """Show dialog for domain restriction handling."""
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Question)
+
+        if restriction_type == 'sqrt':
+            msg.setText("The function contains square root of negative values.")
+        else:  # log
+            msg.setText("The function contains logarithm of non-positive values.")
+
+        msg.setInformativeText("Do you want to plot only the valid domain?")
+        msg.setWindowTitle("Domain Restriction")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+
+        return msg.exec_() == QMessageBox.Yes
+
+    def evaluate_function(self, parser, func_str, x_val):
+        """Evaluate function with domain checking."""
+        is_valid, restriction = parser.check_domain_restrictions(func_str, x_val)
+        if not is_valid:
+            return None
+        try:
+            return parser.evaluate(func_str, x_val)
+        except:
+            return None
+
     def solve_and_plot(self):
         """Solve the functions and create the plot."""
         self.error_label.setText("")
@@ -188,25 +248,66 @@ class MainWindow(QMainWindow):
             # Create x values for plotting
             x = np.linspace(-10, 10, 1000)
 
-            # Calculate y values
-            y1 = [parser.evaluate(func1_str, xi) for xi in x]
-            y2 = [parser.evaluate(func2_str, xi) for xi in x]
+            # Check for domain restrictions
+            domain_restricted = False
+            for xi in x:
+                is_valid1, restriction1 = parser.check_domain_restrictions(func1_str, xi)
+                is_valid2, restriction2 = parser.check_domain_restrictions(func2_str, xi)
+
+                if (not is_valid1 and restriction1) or (not is_valid2 and restriction2):
+                    domain_restricted = True
+                    restriction_type = restriction1 if not is_valid1 else restriction2
+                    plot_valid_domain = self.show_domain_restriction_dialog(restriction_type)
+                    break
+
+            # Calculate y values with domain handling
+            y1 = []
+            y2 = []
+            valid_x = []
+
+            for xi in x:
+                val1 = self.evaluate_function(parser, func1_str, xi)
+                val2 = self.evaluate_function(parser, func2_str, xi)
+
+                if plot_valid_domain if domain_restricted else True:
+                    if val1 is not None and val2 is not None:
+                        valid_x.append(xi)
+                        y1.append(val1)
+                        y2.append(val2)
+                else:
+                    y1.append(val1 if val1 is not None else np.nan)
+                    y2.append(val2 if val2 is not None else np.nan)
+
+            # Plot functions
+            if domain_restricted and plot_valid_domain:
+                self.ax.plot(valid_x, y1, label=f"f1(x) = {func1_str}")
+                self.ax.plot(valid_x, y2, label=f"f2(x) = {func2_str}")
+            else:
+                self.ax.plot(x, y1, label=f"f1(x) = {func1_str}")
+                self.ax.plot(x, y2, label=f"f2(x) = {func2_str}")
 
             # Find intersection points
             intersections_x = []
             intersections_y = []
-            for i in range(len(x) - 1):
-                if (y1[i] - y2[i]) * (y1[i + 1] - y2[i + 1]) <= 0:
-                    # Linear interpolation to find more precise intersection
-                    x_intersect = (x[i] + x[i + 1]) / 2
-                    y_intersect = (parser.evaluate(func1_str, x_intersect) +
-                                   parser.evaluate(func2_str, x_intersect)) / 2
-                    intersections_x.append(x_intersect)
-                    intersections_y.append(y_intersect)
 
-            # Plot functions
-            self.ax.plot(x, y1, label=f"f1(x) = {func1_str}")
-            self.ax.plot(x, y2, label=f"f2(x) = {func2_str}")
+            if domain_restricted and plot_valid_domain:
+                x_array = np.array(valid_x)
+                y1_array = np.array(y1)
+                y2_array = np.array(y2)
+            else:
+                x_array = x
+                y1_array = np.array(y1)
+                y2_array = np.array(y2)
+
+            for i in range(len(x_array) - 1):
+                if (not np.isnan(y1_array[i]) and not np.isnan(y2_array[i]) and
+                        not np.isnan(y1_array[i + 1]) and not np.isnan(y2_array[i + 1])):
+                    if (y1_array[i] - y2_array[i]) * (y1_array[i + 1] - y2_array[i + 1]) <= 0:
+                        x_intersect = (x_array[i] + x_array[i + 1]) / 2
+                        y_intersect = (parser.evaluate(func1_str, x_intersect) +
+                                       parser.evaluate(func2_str, x_intersect)) / 2
+                        intersections_x.append(x_intersect)
+                        intersections_y.append(y_intersect)
 
             # Plot intersection points and update table
             intersection_points = list(zip(intersections_x, intersections_y))
