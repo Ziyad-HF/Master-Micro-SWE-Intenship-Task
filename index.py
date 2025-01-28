@@ -104,21 +104,34 @@ class FunctionParser:
 
 
 class IntersectionTable(QTableWidget):
-    """Table widget to display intersection points."""
+    """Table widget to display intersection points and intervals."""
 
     def __init__(self):
         super().__init__()
-        self.setColumnCount(2)
-        self.setHorizontalHeaderLabels(['X', 'Y'])
+        self.setColumnCount(3)
+        self.setHorizontalHeaderLabels(['Type', 'Start (x, y)', 'End (x, y)'])
         self.horizontalHeader().setStretchLastSection(True)
         self.verticalHeader().setVisible(False)
 
-    def update_points(self, points):
-        """Update table with new intersection points."""
-        self.setRowCount(len(points))
-        for i, (x, y) in enumerate(points):
-            self.setItem(i, 0, QTableWidgetItem(f"{x:.2f}"))
-            self.setItem(i, 1, QTableWidgetItem(f"{y:.2f}"))
+    def update_intersections(self, points, intervals):
+        """Update table with intersection points and intervals."""
+        total_rows = len(points) + len(intervals)
+        self.setRowCount(total_rows)
+
+        row = 0
+        # Add points
+        for x, y in points:
+            self.setItem(row, 0, QTableWidgetItem("Point"))
+            self.setItem(row, 1, QTableWidgetItem(f"({x:.4f}, {y:.4f})"))
+            self.setItem(row, 2, QTableWidgetItem("-"))
+            row += 1
+
+        # Add intervals
+        for start, end in intervals:
+            self.setItem(row, 0, QTableWidgetItem("Interval"))
+            self.setItem(row, 1, QTableWidgetItem(f"({start[0]:.4f}, {start[1]:.4f})"))
+            self.setItem(row, 2, QTableWidgetItem(f"({end[0]:.4f}, {end[1]:.4f})"))
+            row += 1
 
 
 class MainWindow(QMainWindow):
@@ -183,7 +196,7 @@ class MainWindow(QMainWindow):
         # Create intersection points table
         table_widget = QWidget()
         table_layout = QVBoxLayout(table_widget)
-        table_layout.addWidget(QLabel("Intersection Points:"))
+        table_layout.addWidget(QLabel("Intersections:"))
         self.intersection_table = IntersectionTable()
         table_layout.addWidget(self.intersection_table)
 
@@ -223,6 +236,55 @@ class MainWindow(QMainWindow):
         except:
             return None
 
+    def find_intersections(self, x_array, y1_array, y2_array, tolerance=1e-6):
+        """Find both point intersections and intersection intervals."""
+        points = []
+        intervals = []
+
+        i = 0
+        while i < len(x_array) - 1:
+            if np.isnan(y1_array[i]) or np.isnan(y2_array[i]):
+                i += 1
+                continue
+
+            diff = abs(y1_array[i] - y2_array[i])
+
+            if diff <= tolerance:
+                # Found potential interval start
+                start_x = x_array[i]
+                start_y = y1_array[i]
+
+                # Look for interval end
+                j = i + 1
+                while (j < len(x_array) and
+                       not np.isnan(y1_array[j]) and
+                       not np.isnan(y2_array[j]) and
+                       abs(y1_array[j] - y2_array[j]) <= tolerance):
+                    j += 1
+
+                if j - i > 2:  # Consider it an interval if more than 2 points
+                    end_x = x_array[j - 1]
+                    end_y = y1_array[j - 1]
+                    intervals.append(((start_x, start_y), (end_x, end_y)))
+                    i = j
+                else:
+                    # Single point intersection
+                    points.append((x_array[i], y1_array[i]))
+                    i += 1
+            else:
+                # Check for zero crossing
+                if (i < len(x_array) - 1 and
+                        not np.isnan(y1_array[i + 1]) and
+                        not np.isnan(y2_array[i + 1])):
+                    if (y1_array[i] - y2_array[i]) * (y1_array[i + 1] - y2_array[i + 1]) < 0:
+                        # Linear interpolation
+                        x_int = (x_array[i] + x_array[i + 1]) / 2
+                        y_int = (y1_array[i] + y2_array[i]) / 2
+                        points.append((x_int, y_int))
+                i += 1
+
+        return points, intervals
+
     def solve_and_plot(self):
         """Solve the functions and create the plot."""
         self.error_label.setText("")
@@ -250,6 +312,7 @@ class MainWindow(QMainWindow):
 
             # Check for domain restrictions
             domain_restricted = False
+            plot_valid_domain = True
             for xi in x:
                 is_valid1, restriction1 = parser.check_domain_restrictions(func1_str, xi)
                 is_valid2, restriction2 = parser.check_domain_restrictions(func2_str, xi)
@@ -280,46 +343,47 @@ class MainWindow(QMainWindow):
 
             # Plot functions
             if domain_restricted and plot_valid_domain:
-                self.ax.plot(valid_x, y1, label=f"f1(x) = {func1_str}")
-                self.ax.plot(valid_x, y2, label=f"f2(x) = {func2_str}")
+                plot_x = valid_x
+                plot_y1 = y1
+                plot_y2 = y2
             else:
-                self.ax.plot(x, y1, label=f"f1(x) = {func1_str}")
-                self.ax.plot(x, y2, label=f"f2(x) = {func2_str}")
+                plot_x = x
+                plot_y1 = y1
+                plot_y2 = y2
 
-            # Find intersection points
-            intersections_x = []
-            intersections_y = []
+            # Find intersections
+            points, intervals = self.find_intersections(
+                np.array(plot_x),
+                np.array(plot_y1),
+                np.array(plot_y2)
+            )
 
-            if domain_restricted and plot_valid_domain:
-                x_array = np.array(valid_x)
-                y1_array = np.array(y1)
-                y2_array = np.array(y2)
-            else:
-                x_array = x
-                y1_array = np.array(y1)
-                y2_array = np.array(y2)
+            # Update intersection table
+            self.intersection_table.update_intersections(points, intervals)
 
-            for i in range(len(x_array) - 1):
-                if (not np.isnan(y1_array[i]) and not np.isnan(y2_array[i]) and
-                        not np.isnan(y1_array[i + 1]) and not np.isnan(y2_array[i + 1])):
-                    if (y1_array[i] - y2_array[i]) * (y1_array[i + 1] - y2_array[i + 1]) <= 0:
-                        x_intersect = (x_array[i] + x_array[i + 1]) / 2
-                        y_intersect = (parser.evaluate(func1_str, x_intersect) +
-                                       parser.evaluate(func2_str, x_intersect)) / 2
-                        intersections_x.append(x_intersect)
-                        intersections_y.append(y_intersect)
+            # Plot regular parts of functions
+            self.ax.plot(plot_x, plot_y1, label=f"f1(x) = {func1_str}", color='blue')
+            self.ax.plot(plot_x, plot_y2, label=f"f2(x) = {func2_str}", color='red')
 
-            # Plot intersection points and update table
-            intersection_points = list(zip(intersections_x, intersections_y))
-            self.intersection_table.update_points(intersection_points)
-
-            if intersections_x:
-                self.ax.scatter(intersections_x, intersections_y, color='red',
+            # Plot intersection points and intervals
+            if points:
+                x_points, y_points = zip(*points)
+                self.ax.scatter(x_points, y_points, color='black',
                                 zorder=5, label='Intersection Points')
-                for x_int, y_int in zip(intersections_x, intersections_y):
+                for x_int, y_int in points:
                     self.ax.annotate(f'({x_int:.2f}, {y_int:.2f})',
                                      (x_int, y_int), xytext=(5, 5),
                                      textcoords='offset points')
+
+            # Highlight intersection intervals
+            for (start_x, start_y), (end_x, end_y) in intervals:
+                # Create x values for the interval
+                interval_x = np.linspace(start_x, end_x, 100)
+                # Calculate y values using one of the functions
+                interval_y = [self.evaluate_function(parser, func1_str, xi) for xi in interval_x]
+                # Plot the interval in green
+                self.ax.plot(interval_x, interval_y, color='green', linewidth=2,
+                             label='Intersection Interval' if interval_x[0] == intervals[0][0][0] else "")
 
             self.ax.grid(True)
             self.ax.legend()
