@@ -1,12 +1,15 @@
 # main.py
 from PySide2.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QLineEdit, QPushButton, QLabel)
+                               QHBoxLayout, QLineEdit, QPushButton, QLabel,
+                               QTableWidget, QTableWidgetItem, QSplitter)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import numpy as np
 import re
 from math import sqrt, log10
 import sys
+
 
 class FunctionParser:
     """Parse and evaluate mathematical functions."""
@@ -18,7 +21,7 @@ class FunctionParser:
         Returns (bool, str) tuple - (is_valid, error_message)
         """
         # Check for invalid characters
-        allowed = set('x0123456789+-*/^() .logqrt')
+        allowed = set('x0123456789+-*/^() .logsqrt')
         if not all(c in allowed for c in func_str.lower()):
             return False, "Invalid characters detected. Allowed: numbers, x, +, -, *, /, ^, log10(), sqrt()"
 
@@ -65,11 +68,30 @@ class FunctionParser:
         except Exception as e:
             raise ValueError(f"Error evaluating function: {str(e)}")
 
+
+class IntersectionTable(QTableWidget):
+    """Table widget to display intersection points."""
+
+    def __init__(self):
+        super().__init__()
+        self.setColumnCount(2)
+        self.setHorizontalHeaderLabels(['X', 'Y'])
+        self.horizontalHeader().setStretchLastSection(True)
+        self.verticalHeader().setVisible(False)
+
+    def update_points(self, points):
+        """Update table with new intersection points."""
+        self.setRowCount(len(points))
+        for i, (x, y) in enumerate(points):
+            self.setItem(i, 0, QTableWidgetItem(f"{x:.3f}"))
+            self.setItem(i, 1, QTableWidgetItem(f"{y:.3f}"))
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Function Solver")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(1000, 800)
 
         # Create main widget and layout
         main_widget = QWidget()
@@ -108,10 +130,36 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(input_widget)
 
+        # Create splitter for plot and table
+        splitter = QSplitter()
+
+        # Create plot widget
+        plot_widget = QWidget()
+        plot_layout = QVBoxLayout(plot_widget)
+
         # Create matplotlib figure
         self.figure = Figure(figsize=(8, 6))
         self.canvas = FigureCanvas(self.figure)
-        layout.addWidget(self.canvas)
+
+        # Add navigation toolbar
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        plot_layout.addWidget(self.toolbar)
+        plot_layout.addWidget(self.canvas)
+
+        # Create intersection points table
+        table_widget = QWidget()
+        table_layout = QVBoxLayout(table_widget)
+        table_layout.addWidget(QLabel("Intersection Points:"))
+        self.intersection_table = IntersectionTable()
+        table_layout.addWidget(self.intersection_table)
+
+        # Add widgets to splitter
+        splitter.addWidget(plot_widget)
+        splitter.addWidget(table_widget)
+        splitter.setStretchFactor(0, 2)  # Plot takes 2/3 of space
+        splitter.setStretchFactor(1, 1)  # Table takes 1/3 of space
+
+        layout.addWidget(splitter)
 
         self.ax = self.figure.add_subplot(111)
 
@@ -147,12 +195,12 @@ class MainWindow(QMainWindow):
             # Find intersection points
             intersections_x = []
             intersections_y = []
-            for i in range(len(x)-1):
-                if (y1[i] - y2[i]) * (y1[i+1] - y2[i+1]) <= 0:
+            for i in range(len(x) - 1):
+                if (y1[i] - y2[i]) * (y1[i + 1] - y2[i + 1]) <= 0:
                     # Linear interpolation to find more precise intersection
-                    x_intersect = (x[i] + x[i+1]) / 2
+                    x_intersect = (x[i] + x[i + 1]) / 2
                     y_intersect = (parser.evaluate(func1_str, x_intersect) +
-                                 parser.evaluate(func2_str, x_intersect)) / 2
+                                   parser.evaluate(func2_str, x_intersect)) / 2
                     intersections_x.append(x_intersect)
                     intersections_y.append(y_intersect)
 
@@ -160,14 +208,17 @@ class MainWindow(QMainWindow):
             self.ax.plot(x, y1, label=f"f1(x) = {func1_str}")
             self.ax.plot(x, y2, label=f"f2(x) = {func2_str}")
 
-            # Plot intersection points
+            # Plot intersection points and update table
+            intersection_points = list(zip(intersections_x, intersections_y))
+            self.intersection_table.update_points(intersection_points)
+
             if intersections_x:
                 self.ax.scatter(intersections_x, intersections_y, color='red',
-                              zorder=5, label='Intersection Points')
+                                zorder=5, label='Intersection Points')
                 for x_int, y_int in zip(intersections_x, intersections_y):
                     self.ax.annotate(f'({x_int:.2f}, {y_int:.2f})',
-                                   (x_int, y_int), xytext=(5, 5),
-                                   textcoords='offset points')
+                                     (x_int, y_int), xytext=(5, 5),
+                                     textcoords='offset points')
 
             self.ax.grid(True)
             self.ax.legend()
@@ -178,12 +229,13 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.error_label.setText(f"Error: {str(e)}")
 
+
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
 
+
 if __name__ == "__main__":
     main()
-
