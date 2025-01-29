@@ -1,7 +1,9 @@
 # main.py
 from PySide2.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QLineEdit, QPushButton, QLabel,
-                               QTableWidget, QTableWidgetItem, QSplitter, QMessageBox)
+                               QTableWidget, QTableWidgetItem, QSplitter, QMessageBox,
+                               QGridLayout, QDoubleSpinBox, QSpinBox)
+from PySide2.QtCore import QFile
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -21,7 +23,7 @@ class FunctionParser:
         Returns (bool, str) tuple - (is_valid, error_message)
         """
         # Check for invalid characters
-        allowed = set('x0123456789+-*/^() .logsqrt')
+        allowed = set('x0123456789+-*/^().log sqrt')
         if not all(c in allowed for c in func_str.lower()):
             return False, "Invalid characters detected. Allowed: numbers, x, +, -, *, /, ^, log10(), sqrt()"
 
@@ -113,68 +115,229 @@ class IntersectionTable(QTableWidget):
         self.horizontalHeader().setStretchLastSection(True)
         self.verticalHeader().setVisible(False)
 
-    def update_intersections(self, points, intervals):
+
+class IntersectionTable(QTableWidget):
+    """Table widget to display intersection points and intervals."""
+
+    def __init__(self):
+        super().__init__()
+        self.setColumnCount(3)
+        self.setHorizontalHeaderLabels(['Type', 'Start (x, y)', 'End (x, y)'])
+        self.horizontalHeader().setStretchLastSection(True)
+        self.verticalHeader().setVisible(False)
+
+    def update_intersections(self, points, intervals, precision):
         """Update table with intersection points and intervals."""
         total_rows = len(points) + len(intervals)
         self.setRowCount(total_rows)
+        format_str = f"{{:.{precision}f}}"
 
         row = 0
         # Add points
         for x, y in points:
             self.setItem(row, 0, QTableWidgetItem("Point"))
-            self.setItem(row, 1, QTableWidgetItem(f"({x:.4f}, {y:.4f})"))
+            self.setItem(row, 1, QTableWidgetItem(
+                f"({format_str.format(x)}, {format_str.format(y)})")
+                         )
             self.setItem(row, 2, QTableWidgetItem("-"))
             row += 1
 
         # Add intervals
         for start, end in intervals:
             self.setItem(row, 0, QTableWidgetItem("Interval"))
-            self.setItem(row, 1, QTableWidgetItem(f"({start[0]:.4f}, {start[1]:.4f})"))
-            self.setItem(row, 2, QTableWidgetItem(f"({end[0]:.4f}, {end[1]:.4f})"))
+            self.setItem(row, 1, QTableWidgetItem(
+                f"({format_str.format(start[0])}, {format_str.format(start[1])})")
+                         )
+            self.setItem(row, 2, QTableWidgetItem(
+                f"({format_str.format(end[0])}, {format_str.format(end[1])})")
+                         )
             row += 1
+
+
+def show_domain_restriction_dialog(restriction_type):
+    """Show dialog for domain restriction handling."""
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Question)
+
+    if restriction_type == 'sqrt':
+        msg.setText("The function contains square root of negative values.")
+    else:  # log
+        msg.setText("The function contains logarithm of non-positive values.")
+
+    msg.setInformativeText("Do you want to plot only the valid domain?")
+    msg.setWindowTitle("Domain Restriction")
+    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+
+    return msg.exec_() == QMessageBox.Yes
+
+
+def evaluate_function(parser, func_str, x_val):
+    """Evaluate function with domain checking."""
+    is_valid, restriction = parser.check_domain_restrictions(func_str, x_val)
+    if not is_valid:
+        return None
+    try:
+        return parser.evaluate(func_str, x_val)
+    except:
+        return None
+
+
+def find_intersections(x_array, y1_array, y2_array, tolerance=1e-6):
+    """Find both point intersections and intersection intervals."""
+    points = []
+    intervals = []
+
+    i = 0
+    while i < len(x_array) - 1:
+        if np.isnan(y1_array[i]) or np.isnan(y2_array[i]):
+            i += 1
+            continue
+
+        diff = abs(y1_array[i] - y2_array[i])
+
+        if diff <= tolerance:
+            # Found potential interval start
+            start_x = x_array[i]
+            start_y = y1_array[i]
+
+            # Look for interval end
+            j = i + 1
+            while (j < len(x_array) and
+                   not np.isnan(y1_array[j]) and
+                   not np.isnan(y2_array[j]) and
+                   abs(y1_array[j] - y2_array[j]) <= tolerance):
+                j += 1
+
+            if j - i > 2:  # Consider it an interval if more than 2 points
+                end_x = x_array[j - 1]
+                end_y = y1_array[j - 1]
+                intervals.append(((start_x, start_y), (end_x, end_y)))
+                i = j
+            else:
+                # Single point intersection
+                points.append((x_array[i], y1_array[i]))
+                i += 1
+        else:
+            # Check for zero crossing
+            if (i < len(x_array) - 1 and
+                    not np.isnan(y1_array[i + 1]) and
+                    not np.isnan(y2_array[i + 1])):
+                if (y1_array[i] - y2_array[i]) * (y1_array[i + 1] - y2_array[i + 1]) < 0:
+                    # Linear interpolation
+                    x_int = (x_array[i] + x_array[i + 1]) / 2
+                    y_int = (y1_array[i] + y2_array[i]) / 2
+                    points.append((x_int, y_int))
+            i += 1
+
+    return points, intervals
+
+
+def load_stylesheet(file_path):
+    """Load QSS stylesheet from file."""
+    qss_file = QFile(file_path)
+    if qss_file.exists():
+        qss_file.open(QFile.ReadOnly)
+        stylesheet = str(qss_file.readAll(), encoding='utf-8')
+        return stylesheet
+    return ""
+
+
+class PlotSettings(QWidget):
+    """Widget for plot settings controls."""
+
+    def __init__(self):
+        super().__init__()
+        layout = QGridLayout()
+
+        # Domain range controls
+        layout.addWidget(QLabel("Domain:"), 0, 0)
+        layout.addWidget(QLabel("Start:"), 0, 1)
+        self.domain_start = QDoubleSpinBox()
+        self.domain_start.setRange(-1000, 1000)
+        self.domain_start.setValue(-10)
+        self.domain_start.setDecimals(2)
+        layout.addWidget(self.domain_start, 0, 2)
+
+        layout.addWidget(QLabel("End:"), 0, 3)
+        self.domain_end = QDoubleSpinBox()
+        self.domain_end.setRange(-1000, 1000)
+        self.domain_end.setValue(10)
+        self.domain_end.setDecimals(2)
+        layout.addWidget(self.domain_end, 0, 4)
+
+        # Number of points control
+        layout.addWidget(QLabel("Number of Points:"), 1, 0)
+        self.num_points = QSpinBox()
+        self.num_points.setRange(100, 10000)
+        self.num_points.setValue(1000)
+        self.num_points.setSingleStep(100)
+        layout.addWidget(self.num_points, 1, 1, 1, 2)
+
+        # Decimal precision control
+        layout.addWidget(QLabel("Decimal Precision:"), 1, 3)
+        self.precision = QSpinBox()
+        self.precision.setRange(0, 10)
+        self.precision.setValue(2)
+        layout.addWidget(self.precision, 1, 4)
+
+        self.setLayout(layout)
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setObjectName("mainWindow")
         self.setWindowTitle("Function Solver")
         self.setMinimumSize(1000, 800)
 
         # Create main widget and layout
         main_widget = QWidget()
+        main_widget.setObjectName("mainWidget")
         self.setCentralWidget(main_widget)
         layout = QVBoxLayout(main_widget)
 
         # Create input section
         input_widget = QWidget()
+        input_widget.setObjectName("inputWidget")
         input_layout = QVBoxLayout(input_widget)
 
         # Function 1 input
         func1_layout = QHBoxLayout()
-        func1_layout.addWidget(QLabel("Function 1:"))
+        func1_label = QLabel("Function 1:")
+        func1_label.setObjectName("functionLabel")
+        func1_layout.addWidget(func1_label)
         self.func1_input = QLineEdit()
+        self.func1_input.setObjectName("functionInput")
         self.func1_input.setPlaceholderText("Enter first function (e.g., 5*x^2 + 2*x)")
         func1_layout.addWidget(self.func1_input)
         input_layout.addLayout(func1_layout)
 
         # Function 2 input
         func2_layout = QHBoxLayout()
-        func2_layout.addWidget(QLabel("Function 2:"))
+        func2_label = QLabel("Function 2:")
+        func2_label.setObjectName("functionLabel")
+        func2_layout.addWidget(func2_label)
         self.func2_input = QLineEdit()
+        self.func2_input.setObjectName("functionInput")
         self.func2_input.setPlaceholderText("Enter second function (e.g., x^2 - 3*x)")
         func2_layout.addWidget(self.func2_input)
         input_layout.addLayout(func2_layout)
 
+        # plot settings
+        self.plot_settings = PlotSettings()
+        input_layout.addWidget(self.plot_settings)
+
         # Solve button
         self.solve_button = QPushButton("Solve and Plot")
+        self.solve_button.setObjectName("solveButton")
         self.solve_button.clicked.connect(self.solve_and_plot)
         input_layout.addWidget(self.solve_button)
 
         # Error message label
         self.error_label = QLabel()
+        self.error_label.setObjectName("errorLabel")
         self.error_label.setStyleSheet("color: red")
         input_layout.addWidget(self.error_label)
-
         layout.addWidget(input_widget)
 
         # Create splitter for plot and table
@@ -210,81 +373,6 @@ class MainWindow(QMainWindow):
 
         self.ax = self.figure.add_subplot(111)
 
-    def show_domain_restriction_dialog(self, restriction_type):
-        """Show dialog for domain restriction handling."""
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Question)
-
-        if restriction_type == 'sqrt':
-            msg.setText("The function contains square root of negative values.")
-        else:  # log
-            msg.setText("The function contains logarithm of non-positive values.")
-
-        msg.setInformativeText("Do you want to plot only the valid domain?")
-        msg.setWindowTitle("Domain Restriction")
-        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-
-        return msg.exec_() == QMessageBox.Yes
-
-    def evaluate_function(self, parser, func_str, x_val):
-        """Evaluate function with domain checking."""
-        is_valid, restriction = parser.check_domain_restrictions(func_str, x_val)
-        if not is_valid:
-            return None
-        try:
-            return parser.evaluate(func_str, x_val)
-        except:
-            return None
-
-    def find_intersections(self, x_array, y1_array, y2_array, tolerance=1e-6):
-        """Find both point intersections and intersection intervals."""
-        points = []
-        intervals = []
-
-        i = 0
-        while i < len(x_array) - 1:
-            if np.isnan(y1_array[i]) or np.isnan(y2_array[i]):
-                i += 1
-                continue
-
-            diff = abs(y1_array[i] - y2_array[i])
-
-            if diff <= tolerance:
-                # Found potential interval start
-                start_x = x_array[i]
-                start_y = y1_array[i]
-
-                # Look for interval end
-                j = i + 1
-                while (j < len(x_array) and
-                       not np.isnan(y1_array[j]) and
-                       not np.isnan(y2_array[j]) and
-                       abs(y1_array[j] - y2_array[j]) <= tolerance):
-                    j += 1
-
-                if j - i > 2:  # Consider it an interval if more than 2 points
-                    end_x = x_array[j - 1]
-                    end_y = y1_array[j - 1]
-                    intervals.append(((start_x, start_y), (end_x, end_y)))
-                    i = j
-                else:
-                    # Single point intersection
-                    points.append((x_array[i], y1_array[i]))
-                    i += 1
-            else:
-                # Check for zero crossing
-                if (i < len(x_array) - 1 and
-                        not np.isnan(y1_array[i + 1]) and
-                        not np.isnan(y2_array[i + 1])):
-                    if (y1_array[i] - y2_array[i]) * (y1_array[i + 1] - y2_array[i + 1]) < 0:
-                        # Linear interpolation
-                        x_int = (x_array[i] + x_array[i + 1]) / 2
-                        y_int = (y1_array[i] + y2_array[i]) / 2
-                        points.append((x_int, y_int))
-                i += 1
-
-        return points, intervals
-
     def solve_and_plot(self):
         """Solve the functions and create the plot."""
         self.error_label.setText("")
@@ -293,6 +381,17 @@ class MainWindow(QMainWindow):
         # Get functions from input
         func1_str = self.func1_input.text().strip()
         func2_str = self.func2_input.text().strip()
+
+        # Get plot settings
+        domain_start = self.plot_settings.domain_start.value()
+        domain_end = self.plot_settings.domain_end.value()
+        num_points = self.plot_settings.num_points.value()
+        precision = self.plot_settings.precision.value()
+
+        # Check if both functions are provided
+        if not func1_str or not func2_str:
+            self.error_label.setText("Please enter both functions")
+            return
 
         # Validate inputs
         parser = FunctionParser()
@@ -308,7 +407,7 @@ class MainWindow(QMainWindow):
 
         try:
             # Create x values for plotting
-            x = np.linspace(-10, 10, 1000)
+            x = np.linspace(domain_start, domain_end, num_points)
 
             # Check for domain restrictions
             domain_restricted = False
@@ -320,7 +419,7 @@ class MainWindow(QMainWindow):
                 if (not is_valid1 and restriction1) or (not is_valid2 and restriction2):
                     domain_restricted = True
                     restriction_type = restriction1 if not is_valid1 else restriction2
-                    plot_valid_domain = self.show_domain_restriction_dialog(restriction_type)
+                    plot_valid_domain = show_domain_restriction_dialog(restriction_type)
                     break
 
             # Calculate y values with domain handling
@@ -329,8 +428,8 @@ class MainWindow(QMainWindow):
             valid_x = []
 
             for xi in x:
-                val1 = self.evaluate_function(parser, func1_str, xi)
-                val2 = self.evaluate_function(parser, func2_str, xi)
+                val1 = evaluate_function(parser, func1_str, xi)
+                val2 = evaluate_function(parser, func2_str, xi)
 
                 if plot_valid_domain if domain_restricted else True:
                     if val1 is not None and val2 is not None:
@@ -352,14 +451,23 @@ class MainWindow(QMainWindow):
                 plot_y2 = y2
 
             # Find intersections
-            points, intervals = self.find_intersections(
+            points, intervals = find_intersections(
                 np.array(plot_x),
                 np.array(plot_y1),
                 np.array(plot_y2)
             )
 
+            # Round intersection points and intervals based on precision
+            points = [(round(x, precision), round(y, precision)) for x, y in points]
+            intervals = [((round(sx, precision), round(sy, precision)),
+                          (round(ex, precision), round(ey, precision)))
+                         for (sx, sy), (ex, ey) in intervals]
+
             # Update intersection table
-            self.intersection_table.update_intersections(points, intervals)
+            self.intersection_table.update_intersections(points, intervals, precision)
+
+            # Format for annotations
+            format_str = f"{{:.{precision}f}}"
 
             # Plot regular parts of functions
             self.ax.plot(plot_x, plot_y1, label=f"f1(x) = {func1_str}", color='blue')
@@ -371,16 +479,17 @@ class MainWindow(QMainWindow):
                 self.ax.scatter(x_points, y_points, color='black',
                                 zorder=5, label='Intersection Points')
                 for x_int, y_int in points:
-                    self.ax.annotate(f'({x_int:.2f}, {y_int:.2f})',
+                    self.ax.annotate(f'({format_str.format(x_int)}, {format_str.format(y_int)})',
                                      (x_int, y_int), xytext=(5, 5),
-                                     textcoords='offset points')
+                                     textcoords='offset points'
+                    )
 
             # Highlight intersection intervals
             for (start_x, start_y), (end_x, end_y) in intervals:
                 # Create x values for the interval
                 interval_x = np.linspace(start_x, end_x, 100)
                 # Calculate y values using one of the functions
-                interval_y = [self.evaluate_function(parser, func1_str, xi) for xi in interval_x]
+                interval_y = [evaluate_function(parser, func1_str, xi) for xi in interval_x]
                 # Plot the interval in green
                 self.ax.plot(interval_x, interval_y, color='green', linewidth=2,
                              label='Intersection Interval' if interval_x[0] == intervals[0][0][0] else "")
@@ -397,6 +506,12 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+
+    # Load and apply stylesheet
+    stylesheet = load_stylesheet("style.qss")
+    if stylesheet:
+        app.setStyleSheet(stylesheet)
+
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
