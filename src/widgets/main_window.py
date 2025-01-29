@@ -5,10 +5,13 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import numpy as np
-from src.widgets.intersection_table import IntersectionTable
-from src.widgets.plot_settings import PlotSettings
-from src.function_parser import FunctionParser
-from src.utils import show_domain_restriction_dialog, evaluate_function, find_intersections
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+from widgets.intersection_table import IntersectionTable
+from widgets.plot_settings import PlotSettings
+from function_parser import FunctionParser
+from utils import show_domain_restriction_dialog, evaluate_function, find_intersections
 
 
 class MainWindow(QMainWindow):
