@@ -1,0 +1,123 @@
+
+/*ADDONS*/
+
+/* Main window styling */
+#mainWindow {
+    background-color: #f0f0f0;
+}
+
+#mainWidget {
+    background-color: white;
+}
+
+/* Input section styling */
+#inputWidget {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    margin: 10px;
+    padding: 15px;
+}
+
+/* Labels styling */
+#functionLabel {
+    font-size: 14px;
+    font-weight: bold;
+    color: #333333;
+}
+
+/* Input fields styling */
+#functionInput {
+    padding: 8px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: #ffffff;
+}
+
+#functionInput:focus {
+    border-color: #4a90e2;
+    outline: none;
+}
+
+/* Solve button styling */
+#solveButton {
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+#solveButton:hover {
+    background-color: #357abd;
+}
+
+#solveButton:pressed {
+    background-color: #2a5f96;
+}
+
+/* Error label styling */
+#errorLabel {
+    color: #e74c3c;
+    font-size: 13px;
+    margin-top: 5px;
+}
+
+/* Table styling */
+QTableWidget {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #ffffff;
+    alternate-background-color: #f9f9f9;
+}
+
+QTableWidget::item {
+    padding: 5px;
+}
+
+QTableWidget::item:selected {
+    background-color: #e3f2fd;
+    color: #333333;
+}
+
+QTableWidget QHeaderView::section {
+    background-color: #f5f5f5;
+    padding: 8px;
+    border: 1px solid #ddd;
+    font-weight: bold;
+}
+
+/* Splitter styling */
+QSplitter::handle {
+    background-color: #ddd;
+}
+
+QSplitter::handle:horizontal {
+    width: 4px;
+}
+
+QSplitter::handle:vertical {
+    height: 4px;
+}
+
+/* MessageBox styling */
+QMessageBox {
+    background-color: #ffffff;
+}
+
+QMessageBox QPushButton {
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    min-width: 80px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #357abd;
+}
