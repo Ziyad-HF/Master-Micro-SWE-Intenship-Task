@@ -1,116 +1,135 @@
-# Master-Micro-SWE-Internship-Task
+# Function Solver
 
-# Mathematical Function Solver and Plotter
+A Python-based GUI application for plotting and finding intersections between mathematical functions. Built with PySide2 and Matplotlib, this tool provides an intuitive interface for mathematical function analysis.
 
-A Python GUI application that allows users to input, solve, and visualize mathematical functions. The application is built using PySide2 for the GUI interface and Matplotlib for function plotting.
-
-![Function Solver Demo](path_to_gif)
+![Main Application Interface](resources/main_interface.png)
 
 ## Features
 
-### Core Functionality
-- Input and plot two mathematical functions simultaneously
-- Interactive plot with zoom, pan, and save capabilities
-- Automatic detection and visualization of intersections
-- Domain restriction handling for special functions
-- Clear error messages for invalid inputs
+### 1. Interactive Function Input
+- Input two mathematical functions using standard notation
+- Supports operators: +, -, *, /, ^ (power), log10(), sqrt()
+- Real-time input validation and error feedback
 
-### Supported Operations
-- Basic arithmetic: `+`, `-`, `*`, `/`
-- Power operation: `^`
-- Special functions: 
-  - `sqrt()` - Square root
-  - `log10()` - Base-10 logarithm
+### 2. Advanced Plotting
+- Dynamic function plotting with customizable domain
+- Automatic intersection detection (points and intervals)
+- Interactive plot with zoom and pan capabilities
+- Color-coded function graphs for easy distinction
 
-### Intersection Detection
-- Detects single point intersections
-- Identifies continuous intersection intervals
-- Displays intersection data in an organized table
-- Different visualization for points vs. intervals:
-  - Points: Black dots with coordinates
-  - Intervals: Green highlighted regions
+![Features](resources/features.gif)
 
-### Plot Navigation
-- Zoom in/out functionality
-- Pan/Move the plot
-- Reset view option
-- Save plot as image
-- Dynamic axis scaling
-
-### Domain Handling
-- Automatic detection of invalid domains (e.g., negative values in sqrt)
-- User prompt for domain restriction handling
+### 3. Domain Handling
+- Intelligent domain restriction detection for sqrt() and log10()
 - Option to plot only valid domains
-- Clear visualization of function discontinuities
+- Clear visual feedback for domain restrictions
 
-### User Interface
-- Clean and intuitive design
-- Split view with plot and intersection table
-- Adjustable panel sizes
-- Informative error messages
-- Function input validation
-- Responsive layout
+
+### 4. Results Display
+- Detailed intersection table showing points and intervals
+- Configurable decimal precision
+- Clear annotations on the plot
+
+![Intersection Interval](resources/intersection_interval.gif)
+
+
+## Project Structure
+```
+function_solver/
+├── src/
+│   ├── main.py
+│   ├── function_parser.py
+│   ├── widgets/
+│   │   ├── intersection_table.py
+│   │   ├── plot_settings.py
+│   │   └── main_window.py
+│   └── utils.py
+├── tests/
+│   ├── conftest.py
+│   ├── test_function_parser.py
+│   ├── test_intersection_table.py
+│   ├── test_plot_settings.py
+│   ├── test_main_window.py
+│   └── test_integration.py
+├── resources/
+│   └── style.qss
+└── requirements.txt
+```
 
 ## Usage
 
-1. **Enter Functions**
-   - Type your functions in the input fields
-   - Use supported operators and functions
-   - Example: `5*x^2 + 2*x`, `sqrt(x)`, `log10(x)`
-
-2. **Plot and Analyze**
-   - Click "Solve and Plot" button
-   - View the graphical representation
-   - Check intersection points/intervals in the table
-
-3. **Navigate Plot**
-   - Use toolbar buttons for zoom/pan
-   - Reset view as needed
-   - Save plot images for later use
-
-4. **Handle Domain Restrictions**
-   - Respond to domain validation prompts
-   - Choose to plot valid domains only
-   - View clear visual representation of valid regions
-
-## Implementation Details
-
-### Technologies Used
-- **PySide2**: GUI framework
-- **Matplotlib**: Plotting library
-- **NumPy**: Numerical computations
-- **Python**: Core programming language
-
-### Code Organization
-- Modular design with separate classes for:
-  - Function parsing and evaluation
-  - Intersection detection
-  - GUI components
-  - Plot management
-
-### Testing
-- Comprehensive test suite using pytest
-- End-to-end testing of main features
-- Input validation tests
-- Function evaluation tests
-- Intersection detection tests
-
-## Examples
-
-### Basic Functions
-```python
-f1(x) = 2*x + 1
-f2(x) = x^2
+1. Run the application:
+```bash
+python src/main.py
 ```
 
-### Special Functions
-```python
-f1(x) = sqrt(x^2 - 4)
-f2(x) = log10(x)
+2. Enter two functions in the input fields using standard mathematical notation:
+   - Example 1: `5*x^2 + 2*x`
+   - Example 2: `log10(x + 1)`
+   - Example 3: `sqrt(x^2 + 4)`
+
+3. Adjust plot settings if needed:
+   - Domain range
+   - Number of points for calculation
+   - Decimal precision for results
+
+4. Click "Solve and Plot" to generate the visualization
+
+## Supported Mathematical Operations
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| + | Addition | `x + 1` |
+| - | Subtraction | `x - 2` |
+| * | Multiplication | `3*x` |
+| / | Division | `x/2` |
+| ^ | Power | `x^2` |
+| log10() | Base-10 logarithm | `log10(x)` |
+| sqrt() | Square root | `sqrt(x)` |
+
+## Testing
+
+The project includes comprehensive tests using pytest and pytest-qt:
+
+1. Install test dependencies:
+```bash
+pip install pytest pytest-qt
 ```
 
-### Complex Examples
-```python
-f1(x) = 5*x^3 + 2*x
-f2(x) = sqrt(x^2 + 1) + log10(x+10)
+2. Run tests:
+```bash
+pytest tests/
 ```
+
+Test coverage includes:
+- Unit tests for function parsing
+- Widget tests
+- Integration tests
+- End-to-end functionality tests
+
+## Handled Challenges
+
+1. Domain Restrictions: My program will tell you that the current domain has a part that is not valid and ask you if you want to plot only the valid part.
+   - log10() requires x > 0
+   - sqrt() requires x ≥ 0
+
+2. Intersection Detection: The program will find the points and intervals where the two functions intersect.
+   - Points: Exact x and y values
+   - Intervals: Range of x values where functions intersect
+
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Invalid characters detected"**
+   - Check for unsupported mathematical operators
+   - Ensure proper syntax (e.g., `2*x` instead of `2x`)
+
+2. **"Unbalanced parentheses"**
+   - Count opening and closing parentheses
+   - Check for proper function syntax
+
+3. **Plot appears empty**
+   - Verify domain range includes function's interesting regions
+   - Check for domain restrictions (log, sqrt)
